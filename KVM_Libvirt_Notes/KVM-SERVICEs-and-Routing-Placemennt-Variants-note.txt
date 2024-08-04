@@ -1,0 +1,127 @@
+=============================================================
+KVM/Libvirt_Variants:
+VMHost/NetworkHardware_Level
+0. macvtap (VEPA/Bridge/Private modes)
+1. Bridged device
+HiperVizor/VirtualHost_Level
+2. NAT
+3. Routing
+4. Open
+5. Isolated
+6. Buffer SR-IOV
+=============================================================
+
+MacVTap
+https://virt.kernelnewbies.org/MacVTap
+...
+    Purpose
+    Macvtap is a new device driver meant to simplify virtualized bridged networking. It replaces the combination of the tun/tap and bridge drivers with a 
+single module based on the macvlan device driver. A macvtap endpoint is a character device that largely follows the tun/tap ioctl interface and can be 
+used directly by kvm/qemu and other hypervisors that support the tun/tap interface. The endpoint extends an existing network interface, the lower device, 
+and has its own mac address on the same ethernet segment. Typically, this is used to make both the guest and the host show up directly on the switch that 
+the host is connected to.
+
+    VEPA, Bridge and private mode:
+    Like macvlan, any macvtap device can be in one of three modes, defining the communication between macvtap endpoints on a single lower device:
+-- Virtual Ethernet Port Aggregator (VEPA), the default mode: data from one endpoint to another endpoint on the same lower device gets sent down 
+the lower device to external switch. If that switch supports the hairpin mode, the frames get sent back to the lower device and from there to the 
+destination endpoint. Most switches today do not support hairpin mode, so the two endpoints are not able to exchange ethernet frames, although they 
+might still be able to communicate using an tcp/ip router. A linux host used as the adjacent bridge can be put into hairpin mode by writing to 
+/sys/class/net/dev/brif/port/hairpin_mode. This mode is particularly interesting if you want to manage the virtual machine networking at the switch level. 
+A switch that is aware of the VEPA guests can enforce filtering and bandwidth limits per MAC address without the Linux host knowing about it.
+
+-- Bridge, connecting all endpoints directly to each other. Two endpoints that are both in bridge mode can exchange frames directly, without 
+the round trip through the external bridge. This is the most useful mode for setups with classic switches, and when inter-guest communication is performance critical.
+
+-- Private. For completeness, a private mode exists that behaves like a VEPA mode endpoint in the absence of a hairpin aware switch. 
+Even when the switch is in hairpin mode, a private endpoint can never communicate to any other endpoint on the same lowerdev.
+
+https://wiki.libvirt.org/TroubleshootMacvtapHostFail.html
+https://www.ibm.com/docs/en/linux-on-systems?topic=configurations-kvm-guest-virtual-network-configuration-using-macvtap
+...
+
+KVM Host Networking Configuration Choices
+https://www.ibm.com/docs/en/linux-on-systems?topic=recommendations-kvm-host-networking-configuration-choices
+
+Last Updated: 2023-11-28
+There are many choices for network configuration in the KVM host. In this topic, four choices are discussed.
+
+The four network configuration choices are:
+
+-- Using a Linux® bridge with NAT for KVM guests
+-- Using a Linux bridge (without NAT) for KVM guests
+-- Using an Open vSwitch bridge with KVM guests
+-- Using the MacVTap driver with KVM guests
+
+   Each of these choices has trade-offs. In the topics below, each choice will have a 
+topic describing the configuration, and a “review” that highlights the pros and cons 
+to help you to decide which configuration is best for your needs.
+
+   OSA interface traffic forwarding. Before reviewing the various bridge choices, lets first discuss two OSA interface configuration modes 
+that can affect how you choose to incorporate bridges in your network configurations.
+
+-- KVM default NAT-based networking
+https://www.ibm.com/docs/en/linux-on-systems?topic=choices-kvm-default-nat-based-networking
+    NAT-based networking is commonly provided and enabled as default by most major Linux distributions that support KVM virtualization.
+
+-- Using a Linux Bridge
+https://www.ibm.com/docs/en/linux-on-systems?topic=choices-using-linux-bridge
+    An alternative to using a NAT-based network would be to use a standard Linux network bridge.
+
+-- Using Open vSwitch
+https://www.ibm.com/docs/en/linux-on-systems?topic=choices-using-open-vswitch
+    Open vSwitch (abbreviated to OVS) is a production quality, multilayer virtual switch. It is designed to enable massive network automation 
+through programmatic extension, while still supporting standard management interfaces and protocols (for example, NetFlow, sFlow, IPFIX, RSPAN, CLI, LACP, 802.1ag).
+
+-- Using the MacVTap driver
+https://www.ibm.com/docs/en/linux-on-systems?topic=choices-using-macvtap-driver
+    Another alternative to using a bridge to enable a KVM guest to communicate externally is to use the Linux MacVTap driver.
+
+Network Configuration Pros and Cons.
+In this topic we discuss the advantages and disadvantages of the three evaluated Network Configurations.
+
+
+...
+MacVTap driver considerations.
+-- From purely a performance perspective, based on the workloads tested and the Linux® and KVM levels measured, 
+the MacVTap driver consistently demonstrated higher throughputs and better CPU efficiency.
+
+Open vSwitch considerations
+-- Based on the measurement data collected in the scope of this paper, Open vSwitch is a good choice when the 
+restrictions of MacVTap are undesirable.
+
+Linux bridge
+-- Within the context of the workload analysis and measurement results obtained, the standard software bridge 
+included in Linux can also be a reasonable choice for KVM guest connectivity.
+...
+
+
+...
+MacVTap Config Example:
+KVM guest virtual network configuration using MacVTap
+Last Updated: 2023-11-28
+KVM guest definitions that dictate how a KVM guest is configured are performed from within the KVM host environment. KVM guest definitions are specified using an XML file that is processed by the libvirtd daemon. The XML file specifies most of the hardware configuration characteristics of the KVM guest including the virtual network descriptions.
+
+To configure a KVM guest network interface to use the MacVTap driver, the XML stanza to define the KVM guest's interface in the guest's libvirt XML configuration file should include the following:
+
+<interface type="direct">
+  <mac address="12:34:56:78:9a:bc"/>   
+  <source dev="o5s_10g_1" mode="bridge"/> 
+  <model type="virtio"/> 
+  <driver name="vhost"/> 
+</interface>
+The relevant xml tags here are:
+<interface type="direct">
+Used for MacVTap; specifies a direct mapping to an existing KVM host device.
+<source dev="kvm-host-device" mode="bridge">
+Specifies the KVM host network interface name that will be used by the KVM guest's MacVTap interface. The mode keyword defines which MacVTap mode will be used.
+The MAC address field is optional; if it is omitted, the libvirt daemon will generate a unique address.
+
+After the changes have been saved in the KVM guest's libvirt xml configuration file, the libvirt daemon needs to be informed, using the following commands:
+
+[root@kvmhost ~]# virsh undefine <kvm-guest-name>
+[root@kvmhost ~]# virsh define <kvm-guest-libvirt-xml-file>
+A KVM guest definition can only be added when the KVM guest is not running.
+
+Lastly, remember to restart the KVM guest for the changes to take effect. The defined MacVTap interface will be persistent and automatically started whenever the KVM guest restarts.
+...
