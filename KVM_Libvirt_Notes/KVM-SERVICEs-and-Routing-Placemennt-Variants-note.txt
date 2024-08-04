@@ -11,6 +11,15 @@ HiperVizor/VirtualHost_Level
 6. Buffer SR-IOV
 =============================================================
 
+The types of virtual networking available are as follows:
+• Isolated virtual network
+• Routed virtual network
+• NATed virtual network
+• Bridged network using a physical NIC, VLAN interface, bond interface, and bonded VLAN interface
+• MacVTap
+• PCI passthrough NPIV
+• OVS
+
 MacVTap
 https://virt.kernelnewbies.org/MacVTap
 ...
@@ -100,7 +109,9 @@ included in Linux can also be a reasonable choice for KVM guest connectivity.
 MacVTap Config Example:
 KVM guest virtual network configuration using MacVTap
 Last Updated: 2023-11-28
-KVM guest definitions that dictate how a KVM guest is configured are performed from within the KVM host environment. KVM guest definitions are specified using an XML file that is processed by the libvirtd daemon. The XML file specifies most of the hardware configuration characteristics of the KVM guest including the virtual network descriptions.
+KVM guest definitions that dictate how a KVM guest is configured are performed from within the KVM host environment. 
+KVM guest definitions are specified using an XML file that is processed by the libvirtd daemon. 
+The XML file specifies most of the hardware configuration characteristics of the KVM guest including the virtual network descriptions.
 
 To configure a KVM guest network interface to use the MacVTap driver, the XML stanza to define the KVM guest's interface in the guest's libvirt XML configuration file should include the following:
 
@@ -125,3 +136,27 @@ A KVM guest definition can only be added when the KVM guest is not running.
 
 Lastly, remember to restart the KVM guest for the changes to take effect. The defined MacVTap interface will be persistent and automatically started whenever the KVM guest restarts.
 ...
+
+https://blog.scottlowe.org/2016/02/09/using-kvm-libvirt-macvtap-interfaces/
+https://blog.scottlowe.org/2012/08/21/working-with-kvm-guests/
+https://blog.scottlowe.org/2012/11/07/using-vlans-with-ovs-and-libvirt/
+https://blog.scottlowe.org/2012/08/17/installing-kvm-and-open-vswitch-on-ubuntu/
+https://www.openvswitch.org
+
+
+    2. NATed virtual network.
+    A NAT-based virtual network provides outbound network connectivity to the virtual machines. That means the VMs can communicate with the outside network
+based on the network connectivity available on the host but none of the outside entities will be able to communicate with the VMs. In this setup, the virtual machines
+and host should be able to communicate with each other through the bridge interface configured on the host.
+
+    3. Routed virtual network.
+    A routed virtual network allows the connection of virtual machines directly to the physical network. Here VMs will send out packets to the outside network based on 
+the routing rules set on the hypervisor.
+    Routed virtual network. In a routed mode, the virtual network is connected to the physical network using the IP routes specified on the hypervisor. 
+These IP routes are used to route the traffic from the virtual machines to the network attached to the hypervisor. The key point that you need to remember with this configuration 
+is that you need to set up the correct IP route on your router or gateway devices also so that the reply packet should reach the hypervisor back. If there are no routes defined, 
+the reply packet will never reach the host. This mode is not commonly used, unless you have a special use case to create a network with this complexity.
+
+
+    4. Isolated virtual network.
+    As the name implies, this provides a private network between the hypervisor and the virtual machines.
